@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "HTTP Server (Windows)",
+      "type": "shell",
+      "windows": {
+        "command": "Start-Process python -ArgumentList '-m http.server 4173' -WorkingDirectory '${workspaceFolder}'; Start-Process 'http://127.0.0.1:4173/index.html'"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "HTTP Server (Linux)",
+      "type": "shell",
+      "linux": {
+        "command": "python3 -m http.server 4173 >/tmp/gedcom-visualizer-http.log 2>&1 & xdg-open http://127.0.0.1:4173/index.html"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

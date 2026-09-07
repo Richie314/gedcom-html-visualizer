@@ -1,0 +1,181 @@
+:root {
+  --ink: #172033;
+  --muted: #6f7b91;
+  --line: #e5e9f1;
+  --blue: #3d63dd;
+}
+
+body {
+  background: #f7f9fc;
+  color: var(--ink);
+}
+
+.navbar {
+  background: rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+
+.hero {
+  background: radial-gradient(circle at 80% 0%, #e4ebff, transparent 40%), #fff;
+  border-bottom: 1px solid var(--line);
+}
+
+.upload-zone {
+  border: 2px dashed #b9c5df;
+  border-radius: 1.25rem;
+  background: #fff;
+  min-height: 235px;
+  transition: 0.2s ease;
+  cursor: pointer;
+}
+
+  .upload-zone:hover,
+  .upload-zone.dragging {
+    border-color: var(--blue);
+    background: #f4f7ff;
+    transform: translateY(-2px);
+  }
+
+.upload-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: 1rem;
+  background: #edf1ff;
+  color: var(--blue);
+  font-size: 1.55rem;
+}
+
+.stat-card,
+.control-card {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.stat-value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+#scene {
+  width: 100%;
+  height: min(67vh, 680px);
+  min-height: 430px;
+  display: block;
+  border-radius: 1rem;
+  background: #10182b;
+}
+
+.scene-wrap {
+  position: relative;
+}
+
+.scene-hint {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  color: #c7d2ee;
+  background: rgba(16, 24, 43, 0.82);
+  border-radius: 0.6rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.76rem;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  margin-right: 0.35rem;
+}
+
+.legend-dashed {
+  border-radius: 0.1rem;
+}
+
+  .legend-dot + .legend-dot {
+    margin-left: 0.15rem;
+  }
+
+.legend-male {
+  background: #7195ff;
+}
+
+.legend-female {
+  background: #ef82ae;
+}
+
+.legend-sibling {
+  background: #91a0c0;
+}
+
+.legend-marriage {
+  background: #f2b35d;
+}
+
+.empty-state {
+  color: var(--muted);
+}
+
+.detail-panel {
+  min-height: 160px;
+}
+
+.gedcom-rows {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+}
+
+.gedcom-row {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  gap: 0.75rem;
+  padding: 0.35rem 0.65rem 0.35rem
+    calc(0.65rem + (var(--depth) * 1rem));
+  border-bottom: 1px solid var(--line);
+  font-size: 0.78rem;
+}
+
+.gedcom-row:last-child {
+  border-bottom: 0;
+}
+
+.gedcom-row code {
+  color: var(--blue);
+}
+
+.inspector-link,
+.inspector-event {
+  font-size: 0.75rem;
+}
+
+.text-muted {
+  color: var(--muted) !important;
+}
+
+footer {
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
+.github-icon {
+  display: inline-block;
+  vertical-align: text-bottom;
+}
+
+@media (max-width: 767.98px) {
+  #scene {
+    min-height: 390px;
+  }
+
+  .hero h1 {
+    font-size: 2.25rem;
+  }
+}
