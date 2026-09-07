@@ -159,10 +159,19 @@ function generationLevels(graph) {
   const levels = new Map([...graph.people.keys()].map((id) => [id, 0]));
   let changed = true;
 
-  for (let round = 0; round < graph.people.size && changed; round++) {
+  for (let round = 0; round < graph.people.size * 2 && changed; round++) {
     changed = false;
     graph.connectors.forEach((connector) => {
-      const parentLevel = Math.max(0, ...connector.parents.map((id) => levels.get(id) ?? 0));
+      const parentLevel = Math.max(
+        0,
+        ...connector.parents.map((id) => levels.get(id) ?? 0),
+      );
+      connector.parents.forEach((id) => {
+        if (levels.get(id) < parentLevel) {
+          levels.set(id, parentLevel);
+          changed = true;
+        }
+      });
       connector.children.forEach((id) => {
         if (levels.get(id) < parentLevel + 1) {
           levels.set(id, parentLevel + 1);
@@ -292,23 +301,48 @@ function generationPositions(graph) {
   });
   
   graph.people.forEach((person, id) => {
-    const level = levels.get(id), members = grouped.get(level), index = members.indexOf(id);
+    const level = levels.get(id);
+    const members = grouped.get(level);
+    const index = members.indexOf(id);
+    const columns = Math.max(1, Math.ceil(Math.sqrt(members.length)));
+    const rows = Math.ceil(members.length / columns);
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+
     person.position = new THREE.Vector3(
-      (index - (members.length - 1) / 2) * 4.2, 
-      -level * 4.6, 
-      (index % 2) * 1.2 - .6,
+      (column - (columns - 1) / 2) * 4.8,
+      -level * 4.6,
+      (row - (rows - 1) / 2) * 3.8,
     );
   });
 
-  graph.connectors.forEach((connector) => {
-    const memberPositions = [...connector.parents, ...connector.children]
-      .map((id) => graph.people.get(id)?.position).filter(Boolean);
-    connector.position = memberPositions.length
-      ? memberPositions.reduce((total, position) => total.add(position.clone()), new THREE.Vector3()).multiplyScalar(1 / memberPositions.length)
+  graph.connectors.forEach((connector, connectorIndex) => {
+    const parentPositions = connector.parents
+      .map((id) => graph.people.get(id)?.position)
+      .filter(Boolean);
+    const childPositions = connector.children
+      .map((id) => graph.people.get(id)?.position)
+      .filter(Boolean);
+    const touchedPositions = [...parentPositions, ...childPositions];
+    const level = connector.parents.length
+      ? Math.max(...connector.parents.map((id) => levels.get(id) ?? 0))
+      : Math.max(0, ...connector.children.map((id) => (levels.get(id) ?? 1) - 1));
+    const average = touchedPositions.length
+      ? touchedPositions.reduce(
+        (total, position) => total.add(position.clone()),
+        new THREE.Vector3(),
+      ).multiplyScalar(1 / touchedPositions.length)
       : new THREE.Vector3();
-    const parentPositions = connector.parents.map((id) => graph.people.get(id)?.position).filter(Boolean);
-    if (parentPositions.length) {
-      connector.position.y = parentPositions.reduce((total, position) => total + position.y, 0) / parentPositions.length;
+
+    connector.level = level;
+    connector.position = new THREE.Vector3(
+      average.x,
+      -level * 4.6,
+      average.z + 1.4 + (connectorIndex % 3) * 0.45,
+    );
+
+    if (!parentPositions.length && childPositions.length) {
+      connector.position.z = average.z - 1.4;
     }
   });
   return { levels, grouped };
@@ -402,15 +436,26 @@ function buildGraph(graph) {
   $('#generationCount').text(grouped.size || 0);
   
   if (graph.people.size) {
+    const graphSpan = Math.max(
+      16,
+      ...[...graph.people.values()].map((person) => Math.max(
+        Math.abs(person.position.x),
+        Math.abs(person.position.z),
+      ) * 1.8),
+    );
     controls.target.set(0, -(Math.max(0, grouped.size - 1) * 2), 0);
-    camera.position.set(0, -Math.max(0, grouped.size - 1) * 1.5, Math.max(16, graph.people.size * 1.4));
+    camera.position.set(
+      0,
+      -Math.max(0, grouped.size - 1) * 1.5,
+      Math.max(graphSpan, grouped.size * 4.6),
+    );
     controls.update();
   }
 }
 
 function addNode(position, color, label, data, connector = false) {
   const geometry = connector ? 
-    new THREE.OctahedronGeometry(.32, 0) : 
+    new THREE.OctahedronGeometry(.4, 0) :
     new THREE.SphereGeometry(.58, 20, 14);
 
   const mesh = new THREE.Mesh(
@@ -426,8 +471,42 @@ function addNode(position, color, label, data, connector = false) {
     ? data.type === 'marriage' ? 'rgba(121,77,24,.92)' : 'rgba(72,59,126,.92)'
     : 'rgba(20,30,52,.92)';
   const labelSpriteNode = labelSprite(label, '#fff', labelBackground, connector);
-  labelSpriteNode.position.copy(position).add(new THREE.Vector3(0, connector ? .55 : 1, 0));
+  labelSpriteNode.position.copy(position).add(new THREE.Vector3(0, connector ? .68 : 1, 0));
   scene.add(labelSpriteNode);
+}
+
+function moveView(direction, distance) {
+  const offset = direction.clone().multiplyScalar(distance);
+  camera.position.add(offset);
+  controls.target.add(offset);
+}
+
+function handleKeyboardNavigation(event) {
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+    return;
+  }
+
+  const key = event.key.toLowerCase();
+  const directions = {
+    arrowleft: new THREE.Vector3(-1, 0, 0),
+    a: new THREE.Vector3(-1, 0, 0),
+    arrowright: new THREE.Vector3(1, 0, 0),
+    d: new THREE.Vector3(1, 0, 0),
+    arrowup: new THREE.Vector3(0, 1, 0),
+    w: new THREE.Vector3(0, 1, 0),
+    arrowdown: new THREE.Vector3(0, -1, 0),
+    s: new THREE.Vector3(0, -1, 0),
+    q: new THREE.Vector3(0, 0, -1),
+    e: new THREE.Vector3(0, 0, 1),
+  };
+  const direction = directions[key];
+
+  if (!direction) {
+    return;
+  }
+
+  event.preventDefault();
+  moveView(direction, event.shiftKey ? 2.4 : 0.8);
 }
 
 function initScene() {
@@ -447,6 +526,7 @@ function initScene() {
   controls.enableDamping = true;
   controls.minDistance = 5;
   controls.maxDistance = 120;
+  window.addEventListener('keydown', handleKeyboardNavigation);
   
   scene.add(new THREE.AmbientLight(0xffffff, 1.8));
   
