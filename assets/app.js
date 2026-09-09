@@ -245,10 +245,10 @@ function recordRows(record, depth = 0) {
   
   const payload = record.payload;
   const value = payload && typeof payload === 'object'
-    ? `<button class="btn btn-sm btn-link p-0 align-baseline inspector-link" data-inspect-id="${escapeHtml(pointerId(payload))}">${escapeHtml(pointerId(payload))}</button>`
-    : escapeHtml(payload ?? '');
+    ? `<button class="btn btn-sm btn-link p-0 align-baseline inspector-link" data-inspect-id="${$('<div>').text(pointerId(payload)).html()}">${$('<div>').text(pointerId(payload)).html()}</button>`
+    : $('<div>').text(payload ?? '').html();
   
-  const row = `<div class="gedcom-row" style="--depth:${depth}"><code>${escapeHtml(record.tag)}</code><span>${value}</span></div>`;
+  const row = `<div class="gedcom-row" style="--depth:${depth}"><code>${$('<div>').text(record.tag).html()}</code><span>${value}</span></div>`;
   return row + record.sub.map((entry) => recordRows(entry, depth + 1)).join('');
 }
 
@@ -261,9 +261,9 @@ function linkedButtons(item) {
       if (event.personId === item.id) linked.push(`<button class="btn btn-sm btn-outline-secondary inspector-event" data-event-id="${event.id}">${event.tag}</button>`);
     });
   } else if (item.kind === 'connector') {
-    [...item.parents, ...item.children].forEach((id) => linked.push(`<button class="btn btn-sm btn-outline-primary inspector-link" data-inspect-id="${id}">${escapeHtml(currentGraph.people.get(id)?.name || id)}</button>`));
+    [...item.parents, ...item.children].forEach((id) => linked.push(`<button class="btn btn-sm btn-outline-primary inspector-link" data-inspect-id="${id}">${$('<div>').text(currentGraph.people.get(id)?.name || id).html()}</button>`));
   } else if (item.kind === 'event') {
-    linked.push(`<button class="btn btn-sm btn-outline-primary inspector-link" data-inspect-id="${item.personId}">${escapeHtml(currentGraph.people.get(item.personId)?.name || item.personId)}</button>`);
+    linked.push(`<button class="btn btn-sm btn-outline-primary inspector-link" data-inspect-id="${item.personId}">${$('<div>').text(currentGraph.people.get(item.personId)?.name || item.personId).html()}</button>`);
   }
   return linked.length ? `<div class="mt-3"><div class="small text-muted mb-2">Linked records</div><div class="d-flex flex-wrap gap-2">${linked.join('')}</div></div>` : '';
 }
@@ -274,20 +274,13 @@ function showDetails(item) {
 
   if (item.kind === 'event') {
     const eventTitle = child(item.record, 'DATE')?.payload || child(item.record, 'PLAC')?.payload || item.record.payload || item.tag;
-    $detailPanel.html(`<div class="small text-primary fw-semibold mb-1">${escapeHtml(item.tag)} EVENT</div><h3 class="h5 mb-3">${escapeHtml(eventTitle)}</h3><div class="gedcom-rows">${recordRows(item.record)}</div>${linkedButtons(item)}`);
+    $detailPanel.html(`<div class="small text-primary fw-semibold mb-1">${$('<div>').text(item.tag).html()} EVENT</div><h3 class="h5 mb-3">${$('<div>').text(eventTitle).html()}</h3><div class="gedcom-rows">${recordRows(item.record)}</div>${linkedButtons(item)}`);
   } else if (item.kind === 'person') {
     const sexLabel = item.sex === 'F' ? 'WOMAN' : item.sex === 'M' ? 'MAN' : 'PERSON';
-    $detailPanel.html(`<div class="d-flex justify-content-between gap-3"><div><div class="small text-primary fw-semibold mb-1">${sexLabel} · ${item.id}</div><h3 class="h5 mb-2">${escapeHtml(item.givenName)} <em>${escapeHtml(item.surname)}</em></h3></div><div class="fs-3">◉</div></div><div class="gedcom-rows mt-3">${recordRows(item.record)}</div>${linkedButtons(item)}`);
+    $detailPanel.html(`<div class="d-flex justify-content-between gap-3"><div><div class="small text-primary fw-semibold mb-1">${sexLabel} · ${item.id}</div><h3 class="h5 mb-2">${$('<div>').text(item.givenName).html()} <em>${$('<div>').text(item.surname).html()}</em></h3></div><div class="fs-3">◉</div></div><div class="gedcom-rows mt-3">${recordRows(item.record)}</div>${linkedButtons(item)}`);
   } else {
-    $detailPanel.html(`<div class="small text-warning-emphasis fw-semibold mb-1">MARRIAGE · ${item.id}</div><h3 class="h5 mb-3">${item.date ? `Married ${escapeHtml(item.date)}` : 'Marriage'}</h3><div class="gedcom-rows">${recordRows(item.record)}</div>${linkedButtons(item)}`);
+    $detailPanel.html(`<div class="small text-warning-emphasis fw-semibold mb-1">MARRIAGE · ${item.id}</div><h3 class="h5 mb-3">${item.date ? `Married ${$('<div>').text(item.date).html()}` : 'Marriage'}</h3><div class="gedcom-rows">${recordRows(item.record)}</div>${linkedButtons(item)}`);
   }
-}
-
-function escapeHtml(value) { 
-  return String(value).replace(
-    /[&<>"']/g, 
-    (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]
-  );
 }
 
 function generationPositions(graph) {
