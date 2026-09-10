@@ -110,6 +110,10 @@ body {
   background: #ef82ae;
 }
 
+.legend-unknown {
+  background: #82d9a1;
+}
+
 .legend-sibling {
   background: #91a0c0;
 }
