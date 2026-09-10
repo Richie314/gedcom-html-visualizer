@@ -62,7 +62,15 @@ export function parseGedcom(text) {
       .filter((personId) => people.has(personId));
 
     if (marriageDate || child(record, 'MARR')) {
-      connectors.set(id, { id, type: 'marriage', parents, children: childIds, date: marriageDate, label: 'Marriage', record });
+      connectors.set(id, { 
+        id, 
+        type: 'marriage', 
+        parents, 
+        children: childIds, 
+        date: marriageDate, 
+        label: 'Marriage', 
+        record 
+    });
     } else {
       childIds.forEach((childId) => parents.forEach((parentId) => parenthoodLinks.push({
         from: parentId, to: childId, type: 'parenthood',
