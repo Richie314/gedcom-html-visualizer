@@ -1,8 +1,6 @@
 # GEDCOM 3D Visualizer
 
-A simple HTML-based visualizer for GEDCOM family tree files. Load a `.ged` or
-`.gedcom` file in your browser to explore people, family relationships, and
-generations in an interactive 3D graph.
+A simple HTML-based visualizer for GEDCOM family tree files. Load a `.ged` or `.gedcom` file in your browser to explore people, family relationships, and generations in an interactive 3D graph.
 
 ![GEDCOM visualizer 1](./demo/image1.png)
 
@@ -33,14 +31,18 @@ This is a static web project and does not require a build step or installation.
 2. Choose a GEDCOM file or drag one into the upload area.
 3. Interact with the generated 3D family graph.
 
-For local development, the project can also be served with any simple HTTP
-server, for example:
+For local development, the project can also be served with any simple HTTP server, for example:
 
 ```bash
 python -m http.server 4173
 ```
 
 Then open <http://127.0.0.1:4173/index.html> in your browser.
+
+## Graph layout
+
+The selected main person is level 0. A breadth-first traversal assigns each parent a level one step lower and each child a level one step higher, so levels represent relative generations. People at the same level are ordered along the horizontal axis;
+maternal and paternal ancestry are placed on opposite depth branches to reduce crossings. Marriage nodes are placed at the arithmetic midpoint of their parents, so both marriage links meet at the same center.
 
 ## Libraries
 
@@ -49,6 +51,4 @@ Then open <http://127.0.0.1:4173/index.html> in your browser.
 - [Bootstrap](https://getbootstrap.com/).
 - [jQuery](https://jquery.com/).
 
-The libraries are loaded from CDNs through the import map and stylesheet links in
-`index.html`.
-
+The libraries are loaded from CDNs through the import map and stylesheet links in `index.html`.

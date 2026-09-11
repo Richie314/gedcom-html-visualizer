@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import $ from 'jquery';
 
 let renderer;
@@ -9,35 +10,34 @@ let controls;
 let raycaster;
 let pointer;
 let interactive = [];
+let selectedRoot;
 
-function generationLevels(graph) {
-  const levels = new Map([...graph.people.keys()].map((id) => [id, 0]));
-  let changed = true;
-  for (let round = 0; round < graph.people.size * 2 && changed; round += 1) {
-    changed = false;
-    graph.connectors.forEach((connector) => {
-      const parentLevel = Math.max(0, ...connector.parents.map((id) => levels.get(id) ?? 0));
-      connector.parents.forEach((id) => {
-        if (levels.get(id) < parentLevel) {
-          levels.set(id, parentLevel);
-          changed = true;
-        }
-      });
-      connector.children.forEach((id) => {
-        if (levels.get(id) < parentLevel + 1) {
-          levels.set(id, parentLevel + 1);
-          changed = true;
-        }
-      });
-    });
-    graph.links.filter((link) => link.type === 'parenthood').forEach((link) => {
-      const parentLevel = levels.get(link.from) ?? 0;
-      if (levels.get(link.to) < parentLevel + 1) {
-        levels.set(link.to, parentLevel + 1);
-        changed = true;
-      }
+function generationLevels(graph, rootId) {
+  const levels = new Map([[rootId, 0]]);
+  const familyLinks = new Map();
+  const addLink = (from, to, direction) => {
+    const links = familyLinks.get(from) || [];
+    links.push([to, direction]);
+    familyLinks.set(from, links);
+  };
+  graph.connectors.forEach((connector) => connector.parents.forEach((parentId) => connector.children.forEach((childId) => {
+    addLink(parentId, childId, 1);
+    addLink(childId, parentId, -1);
+  })));
+  graph.links.filter((link) => link.type === 'parenthood').forEach((link) => {
+    addLink(link.from, link.to, 1);
+    addLink(link.to, link.from, -1);
+  });
+  const queue = [rootId];
+  while (queue.length) {
+    const id = queue.shift();
+    familyLinks.get(id)?.forEach(([linkedId, direction]) => {
+      if (levels.has(linkedId)) return;
+      levels.set(linkedId, levels.get(id) + direction);
+      queue.push(linkedId);
     });
   }
+  graph.people.forEach((person) => { if (!levels.has(person.id)) levels.set(person.id, 0); });
   return levels;
 }
 
@@ -77,22 +77,39 @@ function labelSprite(lines, color = '#ffffff', background = 'rgba(20,30,52,.9)',
 }
 
 function generationPositions(graph) {
-  const levels = generationLevels(graph);
+  const rootId = selectedRoot || graph.people.keys().next().value;
+  const levels = generationLevels(graph, rootId);
   const grouped = new Map();
   levels.forEach((level, id) => {
     if (!grouped.has(level)) grouped.set(level, []);
     grouped.get(level).push(id);
   });
+  const branches = new Map([[rootId, 0]]);
+  const assignBranch = (id, branch) => {
+    if (branches.has(id)) return;
+    branches.set(id, branch);
+    graph.links.filter((link) => link.to === id).forEach((link) => assignBranch(link.from, branch));
+    graph.connectors.forEach((connector) => {
+      if (connector.children.includes(id)) connector.parents.forEach((parentId) => assignBranch(parentId, branch));
+    });
+  };
+  graph.connectors.forEach((connector) => {
+    if (connector.children.includes(rootId)) connector.parents.forEach((id) => {
+      assignBranch(id, graph.people.get(id)?.sex === 'F' ? 1 : -1);
+    });
+  });
+  graph.links.filter((link) => link.type === 'parenthood' && link.to === rootId).forEach((link) => {
+    assignBranch(link.from, graph.people.get(link.from)?.sex === 'F' ? 1 : -1);
+  });
   graph.people.forEach((person, id) => {
     const level = levels.get(id);
     const members = grouped.get(level);
+    members.sort((first, second) => (branches.get(first) || 0) - (branches.get(second) || 0));
     const index = members.indexOf(id);
-    const columns = Math.max(1, Math.ceil(Math.sqrt(members.length)));
-    const rows = Math.ceil(members.length / columns);
     person.position = new THREE.Vector3(
-      (index % columns - (columns - 1) / 2) * 4.8,
+      (index - (members.length - 1) / 2) * 4.8,
       -level * 4.6,
-      (Math.floor(index / columns) - (rows - 1) / 2) * 3.8,
+      (branches.get(id) || 0) * 4.5,
     );
   });
   graph.connectors.forEach((connector, connectorIndex) => {
@@ -105,15 +122,26 @@ function generationPositions(graph) {
     const average = touchedPositions.length
       ? touchedPositions.reduce((total, position) => total.add(position.clone()), new THREE.Vector3()).multiplyScalar(1 / touchedPositions.length)
       : new THREE.Vector3();
-    connector.position = new THREE.Vector3(average.x, -level * 4.6, average.z + 1.4 + (connectorIndex % 3) * 0.45);
-    if (!parentPositions.length && childPositions.length) connector.position.z = average.z - 1.4;
+    const parentMidpoint = parentPositions.length
+      ? parentPositions.reduce((total, position) => total.add(position.clone()), new THREE.Vector3()).multiplyScalar(1 / parentPositions.length)
+      : null;
+    connector.position = parentMidpoint || new THREE.Vector3(average.x, -level * 4.6, average.z - 1.4);
   });
   return { levels, grouped };
 }
 
 function addNode(position, color, label, data, connector = false) {
-  const geometry = connector ? new THREE.OctahedronGeometry(.4, 0) : new THREE.SphereGeometry(.58, 20, 14);
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color, roughness: .35, metalness: .1 }));
+  const geometry = connector && data.type === 'marriage' ? new THREE.SphereGeometry(.32, 20, 14)
+    : connector ? new THREE.OctahedronGeometry(.4, 0)
+    : data.sex === 'F' ? new THREE.SphereGeometry(.58, 20, 14)
+      : data.sex === 'M' ? new THREE.BoxGeometry(1, 1, 1)
+        : new RoundedBoxGeometry(1, 1, 1, 4, .16);
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+    color,
+    roughness: .35,
+    metalness: .1,
+    side: THREE.DoubleSide,
+  }));
   mesh.position.copy(position);
   mesh.userData = data;
   scene.add(mesh);
@@ -126,7 +154,19 @@ function addNode(position, color, label, data, connector = false) {
   scene.add(labelSpriteNode);
 }
 
+function addLink(from, to, color, radius) {
+  const distance = from.distanceTo(to);
+  const midpoint = from.clone().add(to).multiplyScalar(.5);
+  const geometry = new THREE.CylinderGeometry(radius, radius, distance, 10);
+  const line = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color, depthTest: true, depthWrite: true }));
+  line.position.copy(midpoint);
+  line.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+  line.renderOrder = 1;
+  scene.add(line);
+}
+
 export function renderGraph(graph) {
+  selectedRoot = graph.rootId;
   interactive = [];
   scene.clear();
   scene.add(new THREE.AmbientLight(0xffffff, 1.8));
@@ -139,7 +179,12 @@ export function renderGraph(graph) {
   graph.links.forEach((link) => {
     const from = graph.people.get(link.from)?.position || graph.connectors.get(link.from)?.position;
     const to = graph.people.get(link.to)?.position || graph.connectors.get(link.to)?.position;
-    if (from && to) scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([from, to]), linkMaterial));
+    if (!from || !to) return;
+    const color = link.type === 'parent' ? 0xd83b45 : 0xf28c28;
+    if (link.type === 'parent' || link.type === 'child' || link.type === 'parenthood') {
+      addLink(from, to, color, link.type === 'parenthood' ? .06 : .08);
+    }
+    else scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([from, to]), linkMaterial));
   });
   graph.connectors.forEach((connector) => {
     for (let index = 0; index < connector.children.length; index += 1) {
@@ -158,7 +203,7 @@ export function renderGraph(graph) {
     const years = [String(person.birth || '').match(/\b\d{3,4}\b/)?.[0], String(person.death || '').match(/\b\d{3,4}\b/)?.[0]].filter(Boolean);
     addNode(person.position, color, { givenName: person.givenName, surname: person.surname, name: person.name, detail: years.join(' – ') }, { ...person, kind: 'person' });
   });
-  graph.connectors.forEach((connector) => addNode(connector.position, 0xf2b35d, connector.label, { ...connector, kind: 'connector' }, true));
+  graph.connectors.forEach((connector) => addNode(connector.position, connector.type === 'marriage' ? 0xd83b45 : 0xf2b35d, connector.label, { ...connector, kind: 'connector' }, true));
   $('#peopleCount').text(graph.people.size);
   $('#familyCount').text(graph.connectors.size);
   $('#connectionCount').text(graph.links.length);

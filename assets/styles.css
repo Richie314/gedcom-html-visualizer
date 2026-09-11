@@ -86,40 +86,69 @@ body {
   font-size: 0.76rem;
 }
 
-.legend-dot {
-  display: inline-block;
-  width: 0.65rem;
-  height: 0.65rem;
-  border-radius: 50%;
-  margin-right: 0.35rem;
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
-.legend-dashed {
+.legend-swatch,
+.legend-line {
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.legend-swatch {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.legend-cube {
+  border-radius: 0.08rem;
+}
+
+.legend-sphere,
+.legend-marriage-sphere {
+  border-radius: 50%;
+}
+
+.legend-rounded-cube {
+  border-radius: 0.25rem;
+}
+
+.legend-line {
+  width: 1.25rem;
+  height: 0.18rem;
   border-radius: 0.1rem;
 }
 
-  .legend-dot + .legend-dot {
-    margin-left: 0.15rem;
-  }
+.legend-dashed {
+  height: 0;
+  border-top: 0.18rem dashed currentColor;
+}
 
 .legend-male {
-  background: #7195ff;
+  color: #7195ff;
 }
 
 .legend-female {
-  background: #ef82ae;
+  color: #ef82ae;
 }
 
 .legend-unknown {
-  background: #82d9a1;
+  color: #82d9a1;
 }
 
 .legend-sibling {
-  background: #91a0c0;
+  color: #91a0c0;
 }
 
 .legend-marriage {
-  background: #f2b35d;
+  color: #d83b45;
+}
+
+.legend-child-link {
+  color: #f28c28;
 }
 
 .empty-state {

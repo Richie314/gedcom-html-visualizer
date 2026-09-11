@@ -3,14 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A browser-based 3D GEDCOM family tree visualizer.">
   <link rel="preconnect" href="https://cdn.jsdelivr.net/" crossorigin>
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net/">
 
   <title>GEDCOM 3D visualizer</title>
+  <meta name="description" content="A browser-based 3D GEDCOM family tree visualizer.">
 
   <link
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+  <link 
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css"
     rel="stylesheet"
   >
   <link href="assets/styles.css" rel="stylesheet">
@@ -101,26 +105,33 @@
             Use Q/E for depth and Shift for faster movement.
           </div>
         </div>
-        <div class="d-flex flex-wrap gap-3 small">
-          <span>
-            <i class="legend-dot legend-male"></i>
+        <div class="d-flex flex-wrap gap-3 align-items-center small">
+          <button id="changeRootButton" class="btn btn-sm btn-outline-primary" type="button" disabled>
+            Change main person
+          </button>
+          <span class="legend-item legend-male">
+            <i class="bi bi-square"></i>
             Male
           </span>
-          <span>
-            <i class="legend-dot legend-female"></i>
+          <span class="legend-item legend-female">
+            <i class="bi bi-circle"></i>
             Female
           </span>
-          <span>
-            <i class="legend-dot legend-unknown"></i>
+          <span class="legend-item legend-unknown">
+            <i class="bi bi-diamond"></i>
             Unknown sex
           </span>
-          <span>
-            <i class="legend-dot legend-marriage"></i>
+          <span class="legend-item legend-marriage">
+            <i class="bi bi-heart"></i>
             Marriage
           </span>
-          <span>
-            <i class="legend-dot legend-dashed legend-sibling"></i>
-            Sibling
+          <span class="legend-item legend-child-link">
+            <i class="bi bi-dash"></i>
+            Parenthood
+          </span>
+          <span class="legend-item legend-sibling">
+            <i class="bi bi-dash-square-dotted"></i>
+            Siblinghood
           </span>
         </div>
       </div>
@@ -161,6 +172,25 @@
     </section>
   </main>
 
+  <div class="modal fade" id="mainPersonModal" tabindex="-1" aria-labelledby="mainPersonModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+      <form id="mainPersonForm" class="modal-content">
+        <div class="modal-header">
+          <h2 id="mainPersonModalLabel" class="modal-title h5">Choose the main person</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted">Generations will be centered on this person.</p>
+          <label class="visually-hidden" for="mainPersonSelect">Main person</label>
+          <select id="mainPersonSelect" class="form-select" required></select>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">Generate graph</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <footer class="py-4">
     <div
       class="container d-flex flex-wrap justify-content-between align-items-center gap-2 small text-muted"
@@ -195,6 +225,7 @@
       }
     }
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script type="module" src="assets/app.js"></script>
 </body>
 </html>

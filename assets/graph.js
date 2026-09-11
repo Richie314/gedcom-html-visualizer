@@ -5,6 +5,9 @@ const $uploadZone = $('#uploadZone');
 const $fileInput = $('#fileInput');
 const $fileMessage = $('#fileMessage');
 const $detailPanel = $('#detailPanel');
+const $changeRootButton = $('#changeRootButton');
+const $mainPersonSelect = $('#mainPersonSelect');
+const mainPersonModal = new bootstrap.Modal('#mainPersonModal');
 let currentGraph = { people: new Map(), connectors: new Map(), events: new Map(), links: [] };
 
 function child(record, tag) {
@@ -61,16 +64,16 @@ export function parseGedcom(text) {
     const childIds = children(record, 'CHIL').map((entry) => pointerId(entry.payload))
       .filter((personId) => people.has(personId));
 
-    if (marriageDate || child(record, 'MARR')) {
-      connectors.set(id, { 
-        id, 
-        type: 'marriage', 
-        parents, 
-        children: childIds, 
-        date: marriageDate, 
-        label: 'Marriage', 
-        record 
-    });
+    if (parents.length >= 2) {
+      connectors.set(id, {
+        id,
+        type: 'marriage',
+        parents,
+        children: childIds,
+        date: marriageDate,
+        label: 'Marriage',
+        record,
+      });
     } else {
       childIds.forEach((childId) => parents.forEach((parentId) => parenthoodLinks.push({
         from: parentId, to: childId, type: 'parenthood',
@@ -159,6 +162,27 @@ function showDetails(item) {
   }
 }
 
+function openRootPicker(graph, renderGraph) {
+  $mainPersonSelect.empty();
+  [...graph.people.values()]
+    .sort((first, second) => String(first.birth).localeCompare(String(second.birth)) || first.name.localeCompare(second.name))
+    .forEach((person) => {
+      const years = [String(person.birth || '').match(/\b\d{3,4}\b/)?.[0], String(person.death || '').match(/\b\d{3,4}\b/)?.[0]]
+        .filter(Boolean).join('–');
+      $('<option>', { value: person.id, text: `${person.name} · ${years || '?'} · ${person.sex === 'M' || person.sex === 'F' ? person.sex : '?'}` })
+        .appendTo($mainPersonSelect);
+    });
+  $mainPersonSelect.val(graph.rootId || $mainPersonSelect.find('option').first().val());
+  $('#mainPersonForm').off('submit').on('submit', (event) => {
+    event.preventDefault();
+    graph.rootId = $mainPersonSelect.val();
+    renderGraph(graph);
+    showDetails({ ...graph.people.get(graph.rootId), kind: 'person' });
+    mainPersonModal.hide();
+  });
+  mainPersonModal.show();
+}
+
 function loadFile(file, renderGraph) {
   if (!file) return;
   if (!/\.(ged|gedcom|txt)$/i.test(file.name)) {
@@ -173,7 +197,8 @@ function loadFile(file, renderGraph) {
       currentGraph = graph;
       $fileMessage.text(`${file.name} loaded · ${graph.people.size} people found`)
         .attr('class', `small mt-2 text-center ${graph.errors.length ? 'text-warning' : 'text-success'}`);
-      renderGraph(graph);
+      $changeRootButton.prop('disabled', false);
+      openRootPicker(graph, renderGraph);
     } catch (error) {
       $fileMessage.text(`Could not parse the GEDCOM file: ${error.message}`).attr('class', 'small mt-2 text-center text-danger');
     }
@@ -197,6 +222,7 @@ export function initGraphUI(renderGraph) {
     $uploadZone.removeClass('dragging');
   }));
   $uploadZone.on('drop', (event) => loadFile(event.originalEvent.dataTransfer.files[0], renderGraph));
+  $changeRootButton.on('click', () => openRootPicker(currentGraph, renderGraph));
   $detailPanel.on('click', '[data-inspect-id], [data-event-id]', (event) => {
     const $target = $(event.currentTarget);
     const item = $target.data('eventId')
