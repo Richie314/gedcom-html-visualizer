@@ -11,6 +11,7 @@ let raycaster;
 let pointer;
 let interactive = [];
 let selectedRoot;
+let selectedPersonNode;
 
 /**
  * Assigns each person a signed generation level relative to the root.
@@ -175,12 +176,41 @@ function improveFamilyLayout(graph, levels) {
   });
 }
 
+function focusCameraOnGraph(people) {
+  const bounds = new THREE.Box3();
+  people.forEach((person) => bounds.expandByPoint(person.position));
+
+  const center = bounds.getCenter(new THREE.Vector3());
+  const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+  const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+  const distance = Math.max(12, sphere.radius / Math.sin(verticalFov / 2) * 1.2);
+
+  controls.target.copy(center);
+  camera.position.set(center.x, center.y, center.z + distance);
+  camera.near = Math.max(.1, distance / 1000);
+  camera.far = Math.max(1000, distance * 4);
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+function selectPersonNode(node) {
+  if (selectedPersonNode) {
+    selectedPersonNode.scale.setScalar(1);
+    selectedPersonNode.material.emissiveIntensity = 0;
+  }
+  selectedPersonNode = node || null;
+  if (selectedPersonNode) {
+    selectedPersonNode.material.emissive.setHex(0xffffff);
+  }
+}
+
 
 export function renderGraph(graph) {
   selectedRoot = graph.rootId;
 
   // Clear previous scene
   interactive = [];
+  selectedPersonNode = null;
   scene.clear();
 
   // Add lights
@@ -256,6 +286,7 @@ export function renderGraph(graph) {
     scene.add(personNode);
     interactive.push(personNode);
     scene.add(labelSpriteNode);
+    if (person.id === selectedRoot) selectPersonNode(personNode);
   });
 
   // Add hearts to simbolize marriage
@@ -276,10 +307,7 @@ export function renderGraph(graph) {
   $('#connectionCount').text(graph.links.length);
   $('#generationCount').text(grouped.size || 0);
   if (graph.people.size) {
-    const graphSpan = Math.max(16, ...[...graph.people.values()].map((person) => Math.max(Math.abs(person.position.x), Math.abs(person.position.z)) * 1.8));
-    controls.target.set(0, -(Math.max(0, grouped.size - 1) * 2), 0);
-    camera.position.set(0, -Math.max(0, grouped.size - 1) * 1.5, Math.max(graphSpan, grouped.size * 4.6));
-    controls.update();
+    focusCameraOnGraph(graph.people.values());
   }
 }
 
@@ -352,7 +380,9 @@ export function initRenderer(onSelect) {
     pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
-    onSelect(raycaster.intersectObjects(interactive)[0]?.object.userData);
+    const selected = raycaster.intersectObjects(interactive)[0]?.object;
+    selectPersonNode(selected);
+    onSelect(selected?.userData);
   });
   
   // Handle window resize
@@ -366,9 +396,14 @@ export function initRenderer(onSelect) {
   resize();
   
   // Render loop
-  const animate = () => {
+  const animate = (time) => {
     requestAnimationFrame(animate);
     controls.update();
+    if (selectedPersonNode) {
+      const pulse = (Math.sin(time * .004) + 1) / 2;
+      selectedPersonNode.scale.setScalar(1 + pulse * .12);
+      selectedPersonNode.material.emissiveIntensity = .25 + pulse * .4;
+    }
     renderer.render(scene, camera);
   };
   animate();

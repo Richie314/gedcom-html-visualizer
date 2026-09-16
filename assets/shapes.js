@@ -123,7 +123,7 @@ export function createLink(from, to, color, radius) {
  * @returns The mesh ready to be added to the scene
  */
 export function createHeart() {
-  const scale = .1;
+  const scale = .075;
   const color = 0xd83b45;
   const depth = .7;
  
