@@ -32,9 +32,10 @@ function labelSprite(lines, color = '#ffffff', dataType = '?', compact = false) 
   
   if (personLabel && lines.surname) {
     const prefix = `${lines.givenName} `;
+    context.font = `italic 600 ${titleSize}px system-ui, sans-serif`;
     context.fillText(prefix, 15, compact ? 29 : 31);
     const prefixWidth = context.measureText(prefix).width;
-    context.font = `italic 600 ${titleSize}px system-ui, sans-serif`;
+    context.font = `600 ${titleSize}px system-ui, sans-serif`;
     context.fillText(lines.surname, 15 + prefixWidth, compact ? 29 : 31);
   } else {
     context.fillText(labelLines[0], 15, compact ? 29 : 31);

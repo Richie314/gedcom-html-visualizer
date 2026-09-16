@@ -8,6 +8,7 @@ const $detailPanel = $('#detailPanel');
 const $changeRootButton = $('#changeRootButton');
 const $mainPersonSelect = $('#mainPersonSelect');
 const mainPersonModal = new bootstrap.Modal('#mainPersonModal');
+const relativesModal = new bootstrap.Modal('#relativesModal');
 let currentGraph = { people: new Map(), connectors: new Map(), events: new Map(), links: [] };
 
 function child(record, tag) {
@@ -137,28 +138,255 @@ function recordRows(record, depth = 0) {
 function linkedButtons(item) {
   const linked = [];
   if (item.kind === 'person') {
-    item.families.filter((id) => currentGraph.connectors.has(id)).forEach((id) => linked.push(`<button class="btn btn-sm btn-outline-warning inspector-link" data-inspect-id="${id}">Marriage ${id}</button>`));
+    item.families
+      .filter((id) => currentGraph.connectors.has(id))
+      .forEach((id) => linked.push(
+        `<button class="btn btn-sm btn-outline-warning inspector-link" data-inspect-id="${id}">Marriage ${id}</button>`,
+      ));
     currentGraph.events.forEach((event) => {
-      if (event.personId === item.id) linked.push(`<button class="btn btn-sm btn-outline-secondary inspector-event" data-event-id="${event.id}">${html(event.tag)}</button>`);
+      if (event.personId === item.id) {
+        linked.push(
+          `<button class="btn btn-sm btn-outline-secondary inspector-event" data-event-id="${event.id}">${html(event.tag)}</button>`,
+        );
+      }
     });
   } else if (item.kind === 'connector') {
-    [...item.parents, ...item.children].forEach((id) => linked.push(`<button class="btn btn-sm btn-outline-primary inspector-link" data-inspect-id="${id}">${html(currentGraph.people.get(id)?.name || id)}</button>`));
+    [...item.parents, ...item.children].forEach((id) => linked.push(
+      `<button class="btn btn-sm btn-outline-primary inspector-link" data-inspect-id="${id}">${html(currentGraph.people.get(id)?.name || id)}</button>`,
+    ));
   } else if (item.kind === 'event') {
-    linked.push(`<button class="btn btn-sm btn-outline-primary inspector-link" data-inspect-id="${item.personId}">${html(currentGraph.people.get(item.personId)?.name || item.personId)}</button>`);
+    linked.push(
+      `<button class="btn btn-sm btn-outline-primary inspector-link" data-inspect-id="${item.personId}">${html(currentGraph.people.get(item.personId)?.name || item.personId)}</button>`,
+    );
   }
-  return linked.length ? `<div class="mt-3"><div class="small text-muted mb-2">Linked records</div><div class="d-flex flex-wrap gap-2">${linked.join('')}</div></div>` : '';
+  return linked.length
+    ? `<div class="mt-3"><div class="small text-muted mb-2">Linked records</div><div class="d-flex flex-wrap gap-2">${linked.join('')}</div></div>`
+    : '';
+}
+
+function relativeLevels(personId, maxDegree = 6) {
+  const neighbors = new Map();
+  const addNeighbor = (firstId, secondId) => {
+    if (!firstId || !secondId || firstId === secondId) return;
+    const people = neighbors.get(firstId) || new Set();
+    people.add(secondId);
+    neighbors.set(firstId, people);
+  };
+
+  currentGraph.links
+    .filter((link) => link.type === 'parenthood')
+    .forEach((link) => {
+      addNeighbor(link.from, link.to);
+      addNeighbor(link.to, link.from);
+    });
+
+  currentGraph.connectors.forEach((connector) => {
+    const [firstParent, secondParent] = connector.parents;
+    addNeighbor(firstParent, secondParent);
+    addNeighbor(secondParent, firstParent);
+    connector.parents.forEach((parentId) => connector.children.forEach((childId) => {
+      addNeighbor(parentId, childId);
+      addNeighbor(childId, parentId);
+    }));
+  });
+
+  const levels = new Map([[personId, 0]]);
+  const queue = [personId];
+  while (queue.length) {
+    const currentId = queue.shift();
+    const currentDegree = levels.get(currentId);
+    if (currentDegree >= maxDegree) continue;
+
+    neighbors.get(currentId)?.forEach((neighborId) => {
+      if (levels.has(neighborId)) return;
+      levels.set(neighborId, currentDegree + 1);
+      queue.push(neighborId);
+    });
+  }
+  levels.delete(personId);
+  return levels;
+}
+
+function familyParents(personId) {
+  const parents = new Set();
+  currentGraph.links
+    .filter((link) => link.type === 'parenthood' && link.to === personId)
+    .forEach((link) => parents.add(link.from));
+  currentGraph.connectors.forEach((connector) => {
+    if (connector.children.includes(personId)) {
+      connector.parents.forEach((parentId) => parents.add(parentId));
+    }
+  });
+  return parents;
+}
+
+function familyChildren(personId) {
+  const children = new Set();
+  currentGraph.links
+    .filter((link) => link.type === 'parenthood' && link.from === personId)
+    .forEach((link) => children.add(link.to));
+  currentGraph.connectors.forEach((connector) => {
+    if (connector.parents.includes(personId)) {
+      connector.children.forEach((childId) => children.add(childId));
+    }
+  });
+  return children;
+}
+
+function familyPartners(personId) {
+  const partners = new Set();
+  currentGraph.connectors.forEach((connector) => {
+    if (!connector.parents.includes(personId)) return;
+    connector.parents
+      .filter((partnerId) => partnerId !== personId)
+      .forEach((partnerId) => partners.add(partnerId));
+  });
+  return partners;
+}
+
+function sexAwareLabel(person, female, male, neutral) {
+  if (person.sex === 'F') return female;
+  if (person.sex === 'M') return male;
+  return neutral;
+}
+
+function relativeRelation(rootId, relativeId, degree) {
+  const rootParents = familyParents(rootId);
+  const rootChildren = familyChildren(rootId);
+  const rootPartners = familyPartners(rootId);
+  const relative = currentGraph.people.get(relativeId);
+
+  if (rootPartners.has(relativeId)) {
+    return sexAwareLabel(relative, 'wife', 'husband', 'partner');
+  }
+  if (rootParents.has(relativeId)) {
+    return sexAwareLabel(relative, 'mother', 'father', 'parent');
+  }
+  if (rootChildren.has(relativeId)) {
+    return sexAwareLabel(relative, 'daughter', 'son', 'child');
+  }
+
+  const rootSiblings = new Set();
+  rootParents.forEach((parentId) => {
+    familyChildren(parentId).forEach((childId) => {
+      if (childId !== rootId) rootSiblings.add(childId);
+    });
+  });
+  if (rootSiblings.has(relativeId)) {
+    return sexAwareLabel(relative, 'sister', 'brother', 'sibling');
+  }
+
+  const grandparents = new Set();
+  rootParents.forEach((parentId) => {
+    familyParents(parentId).forEach((grandparentId) => grandparents.add(grandparentId));
+  });
+  if (grandparents.has(relativeId)) {
+    return sexAwareLabel(relative, 'grandmother', 'grandfather', 'grandparent');
+  }
+
+  const grandchildren = new Set();
+  rootChildren.forEach((childId) => {
+    familyChildren(childId).forEach((grandchildId) => grandchildren.add(grandchildId));
+  });
+  if (grandchildren.has(relativeId)) {
+    return sexAwareLabel(relative, 'granddaughter', 'grandson', 'grandchild');
+  }
+
+  return '';
+}
+
+function relativeLabel(person) {
+  const years = [
+    String(person.birth || '').match(/\b\d{3,4}\b/)?.[0],
+    String(person.death || '').match(/\b\d{3,4}\b/)?.[0],
+  ].filter(Boolean).join('–');
+  return `${person.name || 'Unknown person'} · ${years || '?'}`;
+}
+
+function showRelatives(person) {
+  const levels = relativeLevels(person.id);
+  const groups = new Map();
+  levels.forEach((degree, personId) => {
+    const relatives = groups.get(degree) || [];
+    const relative = currentGraph.people.get(personId);
+    if (relative) {
+      relatives.push({
+        person: relative,
+        relation: relativeRelation(person.id, personId, degree),
+      });
+    }
+    groups.set(degree, relatives);
+  });
+
+  const content = [...groups.entries()].sort(([first], [second]) => first - second)
+    .map(([degree, relatives]) => `
+      <section class="mb-3">
+        <h3 class="h6 text-primary">Degree ${degree}</h3>
+        <div class="list-group">
+          ${relatives
+            .sort((first, second) => relativeLabel(first.person).localeCompare(relativeLabel(second.person)))
+            .map(({ person: relative, relation }) => `
+              <button type="button" class="list-group-item list-group-item-action inspector-relative"
+                data-inspect-id="${html(relative.id)}">
+                ${html(relativeLabel(relative))}
+                ${relation ? `<span class="text-muted">(${html(relation)})</span>` : ''}
+              </button>
+            `).join('')}
+        </div>
+      </section>
+    `).join('');
+
+  $('#relativesModalBody').html(content || '<p class="text-muted mb-0">No relatives found within six degrees.</p>');
+  $('#relativesModalLabel').text(`Relatives of ${person.name || person.id}`);
+  relativesModal.show();
 }
 
 function showDetails(item) {
   if (!item) return;
   if (item.kind === 'event') {
-    const eventTitle = child(item.record, 'DATE')?.payload || child(item.record, 'PLAC')?.payload || item.record.payload || item.tag;
-    $detailPanel.html(`<div class="small text-primary fw-semibold mb-1">${html(item.tag)} EVENT</div><h3 class="h5 mb-3">${html(eventTitle)}</h3><div class="gedcom-rows">${recordRows(item.record)}</div>${linkedButtons(item)}`);
+    const eventTitle = child(item.record, 'DATE')?.payload
+      || child(item.record, 'PLAC')?.payload
+      || item.record.payload
+      || item.tag;
+    $detailPanel.html(`
+      <div class="small text-primary fw-semibold mb-1">${html(item.tag)} EVENT</div>
+      <h3 class="h5 mb-3">${html(eventTitle)}</h3>
+      <div class="gedcom-rows">${recordRows(item.record)}</div>
+      ${linkedButtons(item)}
+    `);
   } else if (item.kind === 'person') {
     const sexLabel = item.sex === 'F' ? 'WOMAN' : item.sex === 'M' ? 'MAN' : 'PERSON';
-    $detailPanel.html(`<div class="d-flex justify-content-between gap-3"><div><div class="small text-primary fw-semibold mb-1">${sexLabel} · ${item.id}</div><h3 class="h5 mb-2">${html(item.givenName)} <em>${html(item.surname)}</em></h3></div><div class="fs-3">◉</div></div><div class="gedcom-rows mt-3">${recordRows(item.record)}</div>${linkedButtons(item)}`);
+    $detailPanel.html(`
+      <div class="d-flex justify-content-between gap-3">
+        <div>
+          <div class="small text-primary fw-semibold mb-1">${sexLabel} · ${item.id}</div>
+          <h3 class="h5 mb-2 d-flex align-items-center gap-2">
+            <span><em>${html(item.givenName)}</em> ${html(item.surname)}</span>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-primary rounded-circle p-0"
+              style="width: 1.5rem; height: 1.5rem;"
+              data-show-relatives="${html(item.id)}"
+              aria-label="Show relatives"
+              title="Show relatives"
+            >
+              <i class="bi bi-plus-lg" aria-hidden="true"></i>
+            </button>
+          </h3>
+        </div>
+        <div class="fs-3">◉</div>
+      </div>
+      <div class="gedcom-rows mt-3">${recordRows(item.record)}</div>
+      ${linkedButtons(item)}
+    `);
   } else {
-    $detailPanel.html(`<div class="small text-warning-emphasis fw-semibold mb-1">MARRIAGE · ${item.id}</div><h3 class="h5 mb-3">${item.date ? `Married ${html(item.date)}` : 'Marriage'}</h3><div class="gedcom-rows">${recordRows(item.record)}</div>${linkedButtons(item)}`);
+    const title = item.date ? `Married ${html(item.date)}` : 'Marriage';
+    $detailPanel.html(`
+      <div class="small text-warning-emphasis fw-semibold mb-1">MARRIAGE · ${item.id}</div>
+      <h3 class="h5 mb-3">${title}</h3>
+      <div class="gedcom-rows">${recordRows(item.record)}</div>
+      ${linkedButtons(item)}
+    `);
   }
 }
 
@@ -223,6 +451,16 @@ export function initGraphUI(renderGraph) {
   }));
   $uploadZone.on('drop', (event) => loadFile(event.originalEvent.dataTransfer.files[0], renderGraph));
   $changeRootButton.on('click', () => openRootPicker(currentGraph, renderGraph));
+  $detailPanel.on('click', '[data-show-relatives]', (event) => {
+    const person = currentGraph.people.get($(event.currentTarget).data('showRelatives'));
+    if (person) showRelatives(person);
+  });
+  $('#relativesModalBody').on('click', '.inspector-relative', (event) => {
+    const person = currentGraph.people.get($(event.currentTarget).data('inspectId'));
+    if (!person) return;
+    relativesModal.hide();
+    showDetails({ ...person, kind: 'person' });
+  });
   $detailPanel.on('click', '[data-inspect-id], [data-event-id]', (event) => {
     const $target = $(event.currentTarget);
     const item = $target.data('eventId')
