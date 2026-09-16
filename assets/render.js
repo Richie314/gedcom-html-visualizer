@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import $ from 'jquery';
+import { createPersonNode, createLink, createHeart, placeOnLineMiddle } from './shapes.js';
 
 let renderer;
 let camera;
@@ -58,60 +58,6 @@ function generationLevels(graph, rootId) {
   return levels;
 }
 
-/**
- * Creates a camera-facing label from a canvas texture.
- *
- * `lines` can be plain text, an array of lines, or a person object with
- * givenName, surname, name, and detail fields. Canvas text keeps labels crisp
- * while allowing the same sprite-based rendering approach for every node.
- */
-function labelSprite(lines, color = '#ffffff', dataType = '?', compact = false) {
-  const background = compact
-    ? dataType === 'marriage' ? 'rgba(121,77,24,.92)' : 'rgba(72,59,126,.92)'
-    : 'rgba(20,30,52,.92)';
-
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  const personLabel = !Array.isArray(lines) && typeof lines === 'object';
-  const labelLines = personLabel ? [lines.name, lines.detail].filter(Boolean) : (Array.isArray(lines) ? lines.filter(Boolean) : [lines]);
-  const titleSize = compact ? 21 : 26;
-  const detailSize = 18;
-  context.font = `600 ${titleSize}px system-ui, sans-serif`;
-  const width = Math.max(compact ? 120 : 180, Math.min(480, Math.max(...labelLines.map((line) => context.measureText(line).width)) + 30));
-  canvas.width = width;
-  canvas.height = labelLines.length > 1 ? 76 : 52;
-  context.fillStyle = background;
-  context.roundRect(0, 0, width, canvas.height, 12);
-  context.fill();
-  context.fillStyle = color;
-  context.font = `600 ${titleSize}px system-ui, sans-serif`;
-  
-  if (personLabel && lines.surname) {
-    const prefix = `${lines.givenName} `;
-    context.fillText(prefix, 15, compact ? 29 : 31);
-    const prefixWidth = context.measureText(prefix).width;
-    context.font = `italic 600 ${titleSize}px system-ui, sans-serif`;
-    context.fillText(lines.surname, 15 + prefixWidth, compact ? 29 : 31);
-  } else {
-    context.fillText(labelLines[0], 15, compact ? 29 : 31);
-  }
-  
-  if (labelLines[1]) {
-    context.fillStyle = '#c7d2ee';
-    context.font = `400 ${detailSize}px system-ui, sans-serif`;
-    context.fillText(labelLines[1], 15, 58);
-  }
-
-  // Create sprite and material
-  const material = new THREE.SpriteMaterial({ 
-    map: new THREE.CanvasTexture(canvas), // texture instead of geometry so labels always face the camera
-    transparent: true, 
-    depthTest: false,
-  });
-  const sprite = new THREE.Sprite(material);
-  sprite.scale.set(width / 110, canvas.height / 110, 1);
-  return sprite;
-}
 
 function generatePositions(graph) {
   const rootId = selectedRoot || graph.people.keys().next().value;
@@ -173,84 +119,52 @@ function generatePositions(graph) {
   return { levels, grouped };
 }
 
-function getAppropriateGeometry(data, connector) {
-
-  // Marriage link
-  if (connector && data.type === 'marriage') 
-    return new THREE.SphereGeometry(.32, 20, 14);
-  
-  // Parenthood link
-  if (connector) 
-    return new THREE.OctahedronGeometry(.4, 0);
-  
-  // Person node
-  if (data.sex === 'F') 
-    return new THREE.SphereGeometry(.58, 20, 14);
-  if (data.sex === 'M') 
-    return new THREE.BoxGeometry(1, 1, 1);
-  
-  // Unknown sex
-  return new RoundedBoxGeometry(1, 1, 1, 4, .16);
-}
-
-function addNode(position, color, label, data, connector = false) {
-  // Determine the appropriate geometry based on the node type
-  // and create a material for the node
-  const geometry = getAppropriateGeometry(data, connector);
-  const material = new THREE.MeshStandardMaterial({
-    color,
-    roughness: .35,
-    metalness: .1,
-    side: THREE.DoubleSide,
-  });
-
-  // Create the mesh from the geometry and material
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.copy(position);
-  mesh.userData = data;
-  scene.add(mesh);
-  interactive.push(mesh);
-
-  const labelSpriteNode = labelSprite(label, '#fff', data.type, connector);
-  labelSpriteNode.position.copy(position).add(new THREE.Vector3(0, connector ? .68 : 1, 0));
-  scene.add(labelSpriteNode);
-}
-
-function addLink(from, to, color, radius) {
-  const distance = from.distanceTo(to);
-  const midpoint = from.clone().add(to).multiplyScalar(.5);
-
-  const geometry = new THREE.CylinderGeometry(radius, radius, distance, 10);
-  const material = new THREE.MeshBasicMaterial({ color, depthTest: true, depthWrite: true });
-
-  const line = new THREE.Mesh(geometry, material);
-  line.position.copy(midpoint);
-  line.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
-  line.renderOrder = 1;
-  scene.add(line);
-}
 
 export function renderGraph(graph) {
   selectedRoot = graph.rootId;
+
+  // Clear previous scene
   interactive = [];
   scene.clear();
+
+  // Add lights
   scene.add(new THREE.AmbientLight(0xffffff, 1.8));
   const graphLight = new THREE.DirectionalLight(0xffffff, 2.4);
   graphLight.position.set(5, 10, 12);
   scene.add(graphLight);
+
+  const linkMaterial = new THREE.LineBasicMaterial({ 
+    color: 0x53627f, 
+    transparent: true, 
+    opacity: .7,
+  });
+  const siblingMaterial = new THREE.LineDashedMaterial({ 
+    color: 0x91a0c0, 
+    transparent: true, 
+    opacity: .8, 
+    dashSize: .25, 
+    gapSize: .18,
+  }); // Special links to emphasize siblinghood
+  
   const { grouped } = generatePositions(graph);
-  const linkMaterial = new THREE.LineBasicMaterial({ color: 0x53627f, transparent: true, opacity: .7 });
-  const siblingMaterial = new THREE.LineDashedMaterial({ color: 0x91a0c0, transparent: true, opacity: .8, dashSize: .25, gapSize: .18 });
+
+  // Draw links first so they appear behind nodes
   graph.links.forEach((link) => {
     const from = graph.people.get(link.from)?.position || graph.connectors.get(link.from)?.position;
     const to = graph.people.get(link.to)?.position || graph.connectors.get(link.to)?.position;
-    if (!from || !to) return;
+    if (!from || !to) 
+      return;
+
     const color = link.type === 'parent' ? 0xd83b45 : 0xf28c28;
-    if (link.type === 'parent' || link.type === 'child' || link.type === 'parenthood') {
-      addLink(from, to, color, link.type === 'parenthood' ? .06 : .08);
+    if (['parent', 'child', 'parenthood'].includes(link.type)) {
+      const linkMesh = createLink(from, to, color, link.type === 'parenthood' ? .06 : .08);
+      scene.add(linkMesh);
+    } else {
+      const geometry = new THREE.BufferGeometry().setFromPoints([from, to]);
+      scene.add(new THREE.Line(geometry, linkMaterial));
     }
-    else scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([from, to]), linkMaterial));
   });
+
   graph.connectors.forEach((connector) => {
     for (let index = 0; index < connector.children.length; index += 1) {
       for (let siblingIndex = index + 1; siblingIndex < connector.children.length; siblingIndex += 1) {
@@ -263,12 +177,44 @@ export function renderGraph(graph) {
       }
     }
   });
+
+  // Draw nodes after links so they appear on top
   graph.people.forEach((person) => {
     const color = person.sex === 'F' ? 0xef82ae : person.sex === 'M' ? 0x7195ff : 0x82d9a1;
     const years = [String(person.birth || '').match(/\b\d{3,4}\b/)?.[0], String(person.death || '').match(/\b\d{3,4}\b/)?.[0]].filter(Boolean);
-    addNode(person.position, color, { givenName: person.givenName, surname: person.surname, name: person.name, detail: years.join(' – ') }, { ...person, kind: 'person' });
+    
+    const { personNode, labelSpriteNode } = createPersonNode(
+      person.position, 
+      color,
+      {
+        givenName: person.givenName,
+        surname: person.surname,
+        name: person.name,
+        detail: years.join(' – '),
+      },
+      {
+        ...person,
+        kind: 'person',
+      }
+    );
+    scene.add(personNode);
+    interactive.push(personNode);
+    scene.add(labelSpriteNode);
   });
-  graph.connectors.forEach((connector) => addNode(connector.position, connector.type === 'marriage' ? 0xd83b45 : 0xf2b35d, connector.label, { ...connector, kind: 'connector' }, true));
+
+  // Add hearts to simbolize marriage
+  graph.connectors.forEach(c => {
+    const parent1 = graph.people.get(c.parents[0]);
+    const parent2 = graph.people.get(c.parents[1]);
+    if (!parent1 || !parent2) 
+      return;
+
+    const heart = createHeart();
+    placeOnLineMiddle(heart, parent1.position, parent2.position);
+    scene.add(heart);
+  });
+  
+  
   $('#peopleCount').text(graph.people.size);
   $('#familyCount').text(graph.connectors.size);
   $('#connectionCount').text(graph.links.length);
