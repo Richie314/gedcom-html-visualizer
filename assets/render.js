@@ -116,7 +116,63 @@ function generatePositions(graph) {
       : null;
     connector.position = parentMidpoint || new THREE.Vector3(average.x, -level * 4.6, average.z - 1.4);
   });
+  improveFamilyLayout(graph, levels);
   return { levels, grouped };
+}
+
+function improveFamilyLayout(graph, levels) {
+  const rowMembers = new Map();
+  levels.forEach((level, personId) => {
+    const members = rowMembers.get(level) || [];
+    members.push(graph.people.get(personId));
+    rowMembers.set(level, members);
+  });
+
+  const movePerson = (person, offset) => {
+    if (person) person.position.x += offset;
+  };
+
+  // Keep each couple together and center their children below them.
+  graph.connectors.forEach((connector) => {
+    const parents = connector.parents.map((id) => graph.people.get(id)).filter(Boolean);
+    const children = connector.children.map((id) => graph.people.get(id)).filter(Boolean);
+    if (parents.length === 2) {
+      const parentCenter = parents.reduce((total, parent) => total + parent.position.x, 0) / parents.length;
+      const targetCenter = children.length
+        ? children.reduce((total, child) => total + child.position.x, 0) / children.length
+        : parentCenter;
+      const halfGap = 1.2;
+      movePerson(parents[0], targetCenter - halfGap - parents[0].position.x);
+      movePerson(parents[1], targetCenter + halfGap - parents[1].position.x);
+    }
+  });
+
+  // Prevent people on the same generation row from overlapping after alignment.
+  rowMembers.forEach((members) => {
+    members.sort((first, second) => first.position.x - second.position.x);
+    for (let index = 1; index < members.length; index += 1) {
+      const previous = members[index - 1];
+      const current = members[index];
+      const minimumX = previous.position.x + 3.2;
+      if (current.position.x < minimumX) current.position.x = minimumX;
+    }
+  });
+
+  const allPeople = [...graph.people.values()];
+  const graphCenter = allPeople.reduce((total, person) => total + person.position.x, 0) / allPeople.length;
+  allPeople.forEach((person) => { person.position.x -= graphCenter; });
+
+  graph.connectors.forEach((connector) => {
+    const parentPositions = connector.parents
+      .map((id) => graph.people.get(id)?.position)
+      .filter(Boolean);
+    connector.position = parentPositions.length
+      ? parentPositions.reduce(
+        (total, position) => total.add(position.clone()),
+        new THREE.Vector3(),
+      ).multiplyScalar(1 / parentPositions.length)
+      : connector.position;
+  });
 }
 
 
