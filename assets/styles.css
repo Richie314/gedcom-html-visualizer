@@ -159,6 +159,47 @@ body {
   min-height: 160px;
 }
 
+.birthplace-map {
+  height: min(55vh, 520px);
+  min-height: 320px;
+  border-radius: 0.65rem;
+  overflow: hidden;
+  background: #eaf0f7;
+}
+
+.birthplace-icon {
+  background: transparent;
+  border: 0;
+}
+
+.birthplace-marker {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(23, 32, 51, .45);
+}
+
+.birthplace-marker-male {
+  background: #7195ff;
+}
+
+.birthplace-marker-female {
+  background: #ef82ae;
+}
+
+.birthplace-marker-unknown {
+  background: #82d9a1;
+}
+
+.birthplace-marker-sphere {
+  border-radius: 50%;
+}
+
+.birthplace-marker-rounded-cube {
+  border-radius: 4px;
+}
+
 .gedcom-rows {
   max-height: 260px;
   overflow: auto;

@@ -32,6 +32,10 @@
     rel="stylesheet"
   >
   <link 
+    href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"
+    rel="stylesheet"
+  >
+  <link 
     href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css"
     rel="stylesheet"
   >
@@ -183,6 +187,16 @@
         </div>
       </aside>
 
+      <section class="control-card p-3 mt-3" aria-labelledby="birthplaceHeading">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-2">
+          <h2 id="birthplaceHeading" class="h6 mb-0">Birthplaces and family movement</h2>
+          <div id="birthplaceMapMessage" class="small text-muted" aria-live="polite">
+            Load a GEDCOM file to map birth places.
+          </div>
+        </div>
+        <div id="birthplaceMap" class="birthplace-map" aria-label="Map of family birth places"></div>
+      </section>
+
       <p class="small text-muted mt-4 mb-0">
         Supports the core GEDCOM 5.5.1 record structure
         (INDI, FAM, NAME, SEX, BIRT, DEAT, HUSB, WIFE, CHIL, FAMC and FAMS).
@@ -264,6 +278,8 @@
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.min.js"></script>
   <script type="module" src="assets/app.js"></script>
 </body>
 </html>

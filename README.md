@@ -17,10 +17,12 @@ A simple HTML-based visualizer for GEDCOM family tree files. Load a `.ged` or `.
   - [ ] Display the graph always in a clean, untangled way.
   - [x] Move the camera with WASD or arrow keys.
 - [x] Show basic GEDCOM details for selected people and relationships.
-  - [ ] Display info with dedicated modal.
+  - [x] Display info with dedicated modal.
   - [ ] Automatically extract common info about a record (like date of birth/death).
 - [x] Support the core GEDCOM 5.5.1 records used by the visualizer.
   - [ ] FamilySearch's GEDCOM 7 support.
+- [ ] Additional features
+  - [x] Show movement of birthplaces with generations in a map.
 
 
 ## Usage

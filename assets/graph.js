@@ -10,6 +10,8 @@ const $mainPersonSelect = $('#mainPersonSelect');
 const mainPersonModal = new bootstrap.Modal('#mainPersonModal');
 const relativesModal = new bootstrap.Modal('#relativesModal');
 let currentGraph = { people: new Map(), connectors: new Map(), events: new Map(), links: [] };
+let birthplaceMap;
+const geocodeCache = new Map();
 
 function child(record, tag) {
   return record.sub.find((entry) => entry.tag === tag);
@@ -22,6 +24,11 @@ function children(record, tag) {
 function eventDate(record, eventTag) {
   const event = child(record, eventTag);
   return event ? child(event, 'DATE')?.payload || '' : '';
+}
+
+function eventPlace(record, eventTag) {
+  const event = child(record, eventTag);
+  return event ? child(event, 'PLAC')?.payload || '' : '';
 }
 
 function pointerId(record) {
@@ -51,6 +58,7 @@ export function parseGedcom(text) {
       ...nameParts(record),
       sex: child(record, 'SEX')?.payload || '?',
       birth: eventDate(record, 'BIRT'),
+      birthPlace: eventPlace(record, 'BIRT'),
       death: eventDate(record, 'DEAT'),
       families: [...children(record, 'FAMS'), ...children(record, 'FAMC')].map((entry) => pointerId(entry.payload)),
       record,
@@ -123,6 +131,148 @@ export function parseGedcom(text) {
 
 function html(value) {
   return $('<div>').text(value ?? '').html();
+}
+
+function birthplaceMarker(person) {
+  const sexClass = person.sex === 'F'
+    ? 'birthplace-marker-female'
+    : person.sex === 'M'
+      ? 'birthplace-marker-male'
+      : 'birthplace-marker-unknown';
+  const shapeClass = person.sex === 'F'
+    ? 'birthplace-marker-sphere'
+    : person.sex === 'M'
+      ? 'birthplace-marker-cube'
+      : 'birthplace-marker-rounded-cube';
+  return L.divIcon({
+    className: 'birthplace-icon',
+    html: `<span class="birthplace-marker ${sexClass} ${shapeClass}" aria-hidden="true"></span>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+}
+
+async function geocodePlace(place) {
+  if (geocodeCache.has(place)) return geocodeCache.get(place);
+  const query = encodeURIComponent(place);
+  const response = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${query}`,
+  );
+  if (!response.ok) throw new Error(`Geocoding failed for ${place}`);
+  const results = await response.json();
+  const result = results[0]
+    ? { lat: Number(results[0].lat), lon: Number(results[0].lon) }
+    : null;
+  geocodeCache.set(place, result);
+  return result;
+}
+
+function initBirthplaceMap() {
+  if (birthplaceMap || !document.querySelector('#birthplaceMap')) return;
+  birthplaceMap = L.map('birthplaceMap', { scrollWheelZoom: false });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 19,
+  }).addTo(birthplaceMap);
+  birthplaceMap.setView([20, 0], 2);
+}
+
+function clearBirthplaceLayers() {
+  birthplaceMap.eachLayer((layer) => {
+    if (!(layer instanceof L.TileLayer)) birthplaceMap.removeLayer(layer);
+  });
+}
+
+async function renderBirthplaceMap(graph) {
+  initBirthplaceMap();
+  if (!birthplaceMap) return;
+  clearBirthplaceLayers();
+
+  const peopleWithPlaces = [...graph.people.values()]
+    .filter((person) => String(person.birthPlace || '').trim());
+  $('#birthplaceMapMessage').text(peopleWithPlaces.length
+    ? 'Locating birth places...'
+    : 'No birth places found in this GEDCOM file.');
+  if (!peopleWithPlaces.length) return;
+
+  const locations = new Map();
+  for (const person of peopleWithPlaces) {
+    if (!locations.has(person.birthPlace)) {
+      try {
+        locations.set(person.birthPlace, await geocodePlace(person.birthPlace));
+      } catch {
+        locations.set(person.birthPlace, null);
+      }
+    }
+  }
+
+  const coordinates = new Map();
+  peopleWithPlaces.forEach((person) => {
+    const location = locations.get(person.birthPlace);
+    if (!location) return;
+    const point = [location.lat, location.lon];
+    coordinates.set(person.id, point);
+    L.marker(point, { icon: birthplaceMarker(person) })
+      .bindPopup(`<strong>${html(person.name)}</strong><br>${html(person.birth || 'Birth date unknown')}<br>${html(person.birthPlace)}`)
+      .addTo(birthplaceMap);
+  });
+
+  const parenthoodConnections = new Map();
+  const addParenthoodConnection = (from, to) => {
+    if (!from || !to || from === to) return;
+    parenthoodConnections.set(`${from}:${to}`, { from, to });
+  };
+  graph.links
+    .filter((link) => link.type === 'parenthood')
+    .forEach((link) => addParenthoodConnection(link.from, link.to));
+  graph.connectors.forEach((connector) => {
+    connector.parents.forEach((parentId) => {
+      connector.children.forEach((childId) => addParenthoodConnection(parentId, childId));
+    });
+  });
+
+  parenthoodConnections.forEach((link) => {
+      const parentPoint = coordinates.get(link.from);
+      const childPoint = coordinates.get(link.to);
+      if (!parentPoint || !childPoint) return;
+      const connection = L.polyline([parentPoint, childPoint], {
+        color: '#f28c28',
+        weight: 2,
+        opacity: .8,
+        dashArray: '6 5',
+      });
+      connection
+        .bindTooltip(`${html(graph.people.get(link.from)?.name || link.from)} → ${html(graph.people.get(link.to)?.name || link.to)}`)
+        .addTo(birthplaceMap);
+      L.polylineDecorator(connection, {
+        patterns: [{
+          offset: '97%',
+          repeat: 0,
+          symbol: L.Symbol.arrowHead({
+            pixelSize: 13,
+            polygon: true,
+            pathOptions: {
+              color: '#f28c28',
+              fillColor: '#f28c28',
+              fillOpacity: 1,
+              weight: 3,
+              opacity: 1,
+            },
+          }),
+        }],
+      }).addTo(birthplaceMap);
+    });
+
+  const visiblePoints = [...coordinates.values()];
+  if (visiblePoints.length === 1) {
+    birthplaceMap.setView(visiblePoints[0], 8);
+  } else if (visiblePoints.length > 1) {
+    birthplaceMap.fitBounds(L.latLngBounds(visiblePoints), { padding: [24, 24] });
+  }
+  const unresolved = peopleWithPlaces.length - coordinates.size;
+  $('#birthplaceMapMessage').text(unresolved
+    ? `${coordinates.size} birth places shown; ${unresolved} could not be located.`
+    : `${coordinates.size} birth places shown.`);
 }
 
 function recordRows(record, depth = 0) {
@@ -423,6 +573,7 @@ function loadFile(file, renderGraph) {
     try {
       const graph = parseGedcom(String(reader.result));
       currentGraph = graph;
+      renderBirthplaceMap(graph);
       $fileMessage.text(`${file.name} loaded · ${graph.people.size} people found`)
         .attr('class', `small mt-2 text-center ${graph.errors.length ? 'text-warning' : 'text-success'}`);
       $changeRootButton.prop('disabled', false);
