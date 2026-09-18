@@ -123,10 +123,22 @@ function generatePositions(graph) {
 
 function improveFamilyLayout(graph, levels) {
   const rowMembers = new Map();
+  const relationshipCounts = new Map();
   levels.forEach((level, personId) => {
     const members = rowMembers.get(level) || [];
     members.push(graph.people.get(personId));
     rowMembers.set(level, members);
+  });
+
+  graph.people.forEach((person) => relationshipCounts.set(person.id, 0));
+  graph.links.forEach((link) => {
+    relationshipCounts.set(link.from, (relationshipCounts.get(link.from) || 0) + 1);
+    relationshipCounts.set(link.to, (relationshipCounts.get(link.to) || 0) + 1);
+  });
+  graph.connectors.forEach((connector) => {
+    [...connector.parents, ...connector.children].forEach((personId) => {
+      relationshipCounts.set(personId, (relationshipCounts.get(personId) || 0) + 1);
+    });
   });
 
   const movePerson = (person, offset) => {
@@ -146,6 +158,41 @@ function improveFamilyLayout(graph, levels) {
       movePerson(parents[0], targetCenter - halfGap - parents[0].position.x);
       movePerson(parents[1], targetCenter + halfGap - parents[1].position.x);
     }
+  });
+
+  // Move low-connectivity people out of the space between married partners.
+  graph.connectors.forEach((connector) => {
+    if (connector.parents.length !== 2) return;
+    const [firstParent, secondParent] = connector.parents
+      .map((id) => graph.people.get(id))
+      .filter(Boolean);
+    if (!firstParent || !secondParent) return;
+    if (levels.get(firstParent.id) !== levels.get(secondParent.id)) return;
+
+    const members = rowMembers.get(levels.get(firstParent.id));
+    const leftParent = firstParent.position.x < secondParent.position.x
+      ? firstParent
+      : secondParent;
+    const rightParent = leftParent === firstParent ? secondParent : firstParent;
+    const blockers = members
+      .filter((person) => person !== leftParent && person !== rightParent)
+      .filter((person) => person.position.x > leftParent.position.x
+        && person.position.x < rightParent.position.x)
+      .sort((first, second) => (relationshipCounts.get(first.id) || 0)
+        - (relationshipCounts.get(second.id) || 0));
+
+    let leftBoundary = leftParent.position.x - 3.2;
+    let rightBoundary = rightParent.position.x + 3.2;
+    blockers.forEach((person) => {
+      const moveLeft = person.position.x - leftBoundary < rightBoundary - person.position.x;
+      if (moveLeft) {
+        person.position.x = leftBoundary;
+        leftBoundary -= 3.2;
+      } else {
+        person.position.x = rightBoundary;
+        rightBoundary += 3.2;
+      }
+    });
   });
 
   // Prevent people on the same generation row from overlapping after alignment.

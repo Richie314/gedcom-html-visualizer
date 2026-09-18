@@ -159,11 +159,11 @@ export function createHeart() {
 
 export function placeOnLineMiddle(obj, pointA, pointB) {
   const dx = pointB.x - pointA.x;
-  const dy = pointB.y - pointA.y;
+  //const dy = pointB.y - pointA.y;
   const dz = pointB.z - pointA.z;
 
   const angleY = Math.PI - Math.atan2(dz, dx);
-  const angleZ = Math.PI + Math.atan2(dy, dx);
+  //const angleZ = Math.PI + Math.atan2(dy, dx);
 
   obj.position.set(
     (pointA.x + pointB.x) / 2,
@@ -171,5 +171,6 @@ export function placeOnLineMiddle(obj, pointA, pointB) {
     (pointA.z + pointB.z) / 2,
   );
   obj.rotation.y = angleY;
-  obj.rotation.z = angleZ;
+  //obj.rotation.z = angleZ;
+  obj.rotation.z = Math.PI;
 }
